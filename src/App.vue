@@ -14,9 +14,9 @@ const customOpen = ref(false)         // 自定义时长面板开合
 
 const {
   ready, state, playing, countdownText, toast,
-  selectedKey, selectedName, preparingKey, cachedKeys,
+  selectedKey, selectedName,
   cacheState, CACHE_ICON,
-  toggle, selectDuration, selectAudio, stop,
+  toggle, selectDuration, selectAudio, downloadSelectedAudio, stop,
 } = usePlayer()
 
 function onPreset(p) {                 // 选择页按钮分发:自定义开面板,其余直接启动
@@ -27,6 +27,7 @@ function onSelectAudio(key) {          // 下拉选中:关下拉 + 切源(同 ke
   audioOpen.value = false
   selectAudio(key)
 }
+function onDownloadAudio(key) { downloadSelectedAudio(key) }
 </script>
 
 <template>
@@ -36,22 +37,30 @@ function onSelectAudio(key) {          // 下拉选中:关下拉 + 切源(同 ke
       <!-- 选择页:idle -->
       <section v-if="state === 'idle'" key="select" class="page select-page">
         <div class="audio-picker">
-          <button class="audio-chip" @click="audioOpen = !audioOpen">
+          <button class="audio-chip" @click="audioOpen = !audioOpen" aria-label="选择音源">
             <span class="audio-name">{{ selectedName }}</span>
-            <!-- 缓存态图标:与下拉项同款,反映当前选中音源的真实离线态 -->
-            <i v-bind="CACHE_ICON[cacheState(selectedKey)]"></i>
           </button>
+          <button
+            :class="['cache-action', { busy: ['checking', 'downloading'].includes(cacheState(selectedKey)) }]"
+            :disabled="['checking', 'downloading', 'builtin', 'local'].includes(cacheState(selectedKey))"
+            :aria-label="CACHE_ICON[cacheState(selectedKey)].title"
+            @click="onDownloadAudio(selectedKey)"
+          ><i v-bind="CACHE_ICON[cacheState(selectedKey)]"></i></button>
           <div v-if="audioOpen" class="dropdown-backdrop" @click="audioOpen = false"></div>
           <Transition name="dropdown">
             <ul v-if="audioOpen" class="audio-dropdown">
               <li
                 v-for="a in AUDIO_SOURCES" :key="a.key"
-                :class="['audio-item', { on: a.key === selectedKey, loading: preparingKey === a.key }]"
+                :class="['audio-item', { on: a.key === selectedKey }]"
                 @click="onSelectAudio(a.key)"
               >
                 <span class="audio-item-name">{{ a.name }}</span>
-                <!-- 缓存态图标:云端=未下载(点一下即下载)/本地=已落盘可离线/旋转=正在烤制 -->
-                <i v-bind="CACHE_ICON[cacheState(a.key)]"></i>
+                <button
+                  :class="['cache-action item-cache-action', { busy: ['checking', 'downloading'].includes(cacheState(a.key)) }]"
+                  :disabled="['checking', 'downloading', 'builtin', 'local'].includes(cacheState(a.key))"
+                  :aria-label="`${a.name}：${CACHE_ICON[cacheState(a.key)].title}`"
+                  @click.stop="onDownloadAudio(a.key)"
+                ><i v-bind="CACHE_ICON[cacheState(a.key)]"></i></button>
               </li>
             </ul>
           </Transition>
@@ -124,17 +133,26 @@ h1 {
 
 /* 音源下拉框:与圆块精确等宽(2×圆 + gap), 加存在感 */
 .audio-picker {
-  position: relative; width: 100%;
+  position: relative; width: 100%; display: flex; gap: 8px;
   max-width: calc(2 * clamp(108px, 30vw, 138px) + 22px);
 }
 .audio-chip {
-  width: 100%; padding: 13px 18px; border: 1px solid rgba(255,255,255,.18);
+  flex: 1; min-width: 0; padding: 13px 18px; border: 1px solid rgba(255,255,255,.18);
   border-radius: 999px; background: rgba(255,255,255,.09); color: #f0eaff;
   font-size: 15px; letter-spacing: 1px; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   backdrop-filter: blur(8px);
   transition: background .18s, border-color .18s;
 }
+.cache-action {
+  width: 46px; border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+  background: rgba(255,255,255,.09); color: #f0eaff; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cache-action:hover:not(:disabled) { background: rgba(255,255,255,.16); }
+.cache-action:disabled { cursor: default; opacity: .9; }
+.cache-action.busy { cursor: progress; }
+.item-cache-action { width: 34px; height: 30px; border: none; border-radius: 8px; background: transparent; }
 .audio-chip:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); }
 
 .dropdown-backdrop { position: fixed; inset: 0; z-index: 9; }   /* 透明背板,点外关闭 */
@@ -156,11 +174,11 @@ h1 {
 }
 .audio-item:hover { background: rgba(255,255,255,.07); }
 .audio-item.on { background: rgba(167,139,250,.2); color: #fff; }
-.audio-item.loading { opacity: .6; cursor: progress; }
 .cache-ic { font-size: 14px; }
 .local-ic { color: #5ad19a; }                 /* 本地:绿,离线可用 */
 .cloud-ic { color: #9d8fc2; opacity: .85; }   /* 云端:需下载 */
 .loading-ic { color: #9d8fc2; }
+.error-ic { color: #f2b35d; }
 
 /* 下拉开合过渡 */
 .dropdown-enter-active, .dropdown-leave-active { transition: opacity .18s, transform .18s; }

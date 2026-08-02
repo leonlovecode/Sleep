@@ -28,8 +28,8 @@ export default defineConfig({
         // app shell 预缓存：代码/样式/图标 + Font Awesome webfont（woff2）。
         // woff2 必须进 precache——否则关后端刷新时 CSS 引用的字体 404，<i class="fa-"> 渲染成豆腐块。
         globPatterns: ['**/*.{js,css,html,svg,png,json,woff2,woff}'],
-        // 音频（6 段 ogg，Opus 64k，约 20-30MB）走运行时缓存：首次播放后落盘，再次/离线即取本地，
-        // 不塞进安装预缓存以免首装拖慢。
+        // 音频（6 段 ogg，Opus 64k，约 4.3MB）走运行时缓存：手动下载或在线播放时完整缓存，
+        // 不塞进安装预缓存，以免首装拖慢。
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
@@ -37,6 +37,7 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'sleep-audio',
+              rangeRequests: true,
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },

@@ -1,13 +1,25 @@
 // scripts/build-audio.mjs
 // 将 src/audio/ 下的 .mp3 转为 .ogg (Opus 64k, 烘焙 5s 淡入淡出)
-import { execSync } from 'child_process'
-import { readdir, stat } from 'fs/promises'
+import { execFileSync } from 'child_process'
+import { rename, readdir, stat, unlink } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { CROSSFADE_SECONDS, FADE_CURVE } from '../src/audio-config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const audioDir = join(__dirname, '..', 'src', 'audio')
-const FADE = 5 // 秒，与 usePlayer.js 中的 FADE 常量保持一致
+const FADE = CROSSFADE_SECONDS
+
+function run(binary, args, options = {}) {
+  try {
+    return execFileSync(binary, args, { encoding: 'utf-8', ...options })
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new Error(`未找到 ${binary}。请确认 FFmpeg 已安装并已重启终端/Codex 以刷新 PATH。`)
+    }
+    throw error
+  }
+}
 
 async function main() {
   const files = await readdir(audioDir)
@@ -22,22 +34,26 @@ async function main() {
   for (const file of mp3Files) {
     const input = join(audioDir, file)
     const output = join(audioDir, file.replace(/\.mp3$/i, '.ogg'))
+    const tempOutput = output.replace(/\.ogg$/i, '.tmp.ogg')
 
     // 获取时长
-    const duration = execSync(
-      `ffprobe -v error -show_entries format=duration -of csv=p=0 "${input}"`,
-      { encoding: 'utf-8' }
-    ).trim()
+    const duration = run('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', input,
+    ]).trim()
 
     const fadeOutStart = Math.max(0, parseFloat(duration) - FADE)
+    if (!Number.isFinite(fadeOutStart) || parseFloat(duration) <= FADE * 2) {
+      throw new Error(`${file} 时长必须大于 ${FADE * 2} 秒，无法生成稳定循环`)
+    }
 
-    // 转换: MP3 → Opus 64k, 烘焙淡入淡出
-    execSync(
-      `ffmpeg -y -i "${input}" ` +
-      `-af "afade=t=in:st=0:d=${FADE},afade=t=out:st=${fadeOutStart}:d=${FADE}" ` +
-      `-c:a libopus -b:a 64k -vbr off "${output}"`,
-      { stdio: 'inherit' }
-    )
+    // 与原版 Math.sqrt(progress) 对齐的等功率淡变。
+    await unlink(tempOutput).catch(() => {})
+    run('ffmpeg', [
+      '-y', '-i', input,
+      '-af', `afade=t=in:st=0:d=${FADE}:curve=${FADE_CURVE},afade=t=out:st=${fadeOutStart}:d=${FADE}:curve=${FADE_CURVE}`,
+      '-c:a', 'libopus', '-b:a', '64k', '-vbr', 'off', tempOutput,
+    ], { stdio: 'inherit' })
+    await rename(tempOutput, output)
 
     const statResult = await stat(output)
     const sizeKB = (statResult.size / 1024).toFixed(1)

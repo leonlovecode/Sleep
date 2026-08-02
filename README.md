@@ -8,7 +8,7 @@
 
 Sleep 追求纯粹 —— **高质量环境音，氛围感强，定时无缝循环，点开即用**，免费无广告。
 
-- **无缝循环** —— 高质量环境音循环播放，相邻两段 5 秒重叠交叉淡变
+- **无缝循环** —— 高质量环境音循环播放，相邻两段 5 秒等功率交叉淡变
 - **多音源** —— 打雷下雨 / 倾盆大雨 / 淅沥下雨 / 海边礁石 / 夜晚蟋蟀青蛙 / 旷野
 - **倒计时停止** —— 预设 10 分 / 30 分 / 1 小时 / 2 小时 / 无限 / 自定义（径向圆盘选择器）
 - **可安装 / 可离线** —— PWA，断网可用
@@ -24,12 +24,26 @@ Sleep 追求纯粹 —— **高质量环境音，氛围感强，定时无缝循�
 
 ```bash
 npm install
-npm run build:audio    # 将 MP3 转为 Opus（需要安装 ffmpeg；build 时自动执行）
+npm run doctor         # 检查 Node 24、ffmpeg/ffprobe、libopus 与音频源
+npm run test:countdown # 倒计时格式化自检
+npm run build:audio    # 将 MP3 转为 Opus（build 时自动执行）
 npm run dev            # 开发服务器（手机测试用输出的 Network 地址，同 WiFi），端口默认 5184，被占会自动跳
 npm run build          # 产出单文件 dist/index.html（ogg/字体全内联，U 盘 file:// 直开）
 npm run build:pwa      # 产出 PWA 多文件 dist/（给 GitHub Pages，含 service worker）
 npm run preview        # 配合 build:pwa 本地预览 PWA
 ```
+
+本地要求：Node.js 24.18.1（见 `.nvmrc`）与 PATH 中可用的 `ffmpeg`、`ffprobe`，且 FFmpeg 必须包含 `libopus` 编码器。
+
+## 更新说明
+
+项目更新记录见 [CHANGELOG.md](./CHANGELOG.md)。正式发布时，先将已验证的 `main` 提交推送到 GitHub，再推送同一提交的 `v*` 标签；Release 工作流会自动生成并附加 `Sleep.html`。
+
+## 离线音频
+
+- 单文件版：全部音频已内置，无需下载。
+- PWA 版：打开页面不会自动下载音频；点击音源右侧云图标可下载以供离线使用。
+- 在线播放未下载的音源时，应用会在后台尝试完整缓存；只有 Cache Storage 校验成功后才显示绿色勾选。
 
 ## 素材来源
 

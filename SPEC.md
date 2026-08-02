@@ -16,20 +16,24 @@
 ## 项目结构
 
 ```text
-Sleep-main/
+Sleep/
 ├── index.html                      # Vite 入口，全局 CSS 重置
 ├── package.json                    # 依赖和构建脚本
 ├── vite.config.js                  # 单文件构建配置（dev + build）
 ├── vite.config.pwa.js              # PWA 构建配置（manifest + service worker）
 ├── LICENSE                         # MIT License
 ├── README.md                       # 简介、用法、素材来源
+├── CHANGELOG.md                    # 面向使用者的版本更新说明
 ├── SPEC.md                         # 本文件
+├── .nvmrc                          # 固定 Node.js 版本
 ├── .gitignore
 ├── .github/workflows/
 │   ├── deploy.yml                  # push main → 构建 PWA → 部署 GitHub Pages
 │   └── release.yml                 # push v* tag → 构建单文件 → Release 附件
 ├── scripts/
-│   └── build-audio.mjs             # 构建时音频转码：MP3 → Opus 64k + 烘焙淡入淡出
+│   ├── build-audio.mjs             # 构建时音频转码：MP3 → Opus 64k + 烘焙淡入淡出
+│   ├── doctor.mjs                  # Node、FFmpeg 和音频源环境检查
+│   └── check-audio-seams.mjs       # OGG 产物与时长完整性检查
 ├── public/
 │   ├── favicon.svg                 # 网站图标
 │   ├── icon-192.png               # PWA 图标
@@ -40,6 +44,8 @@ Sleep-main/
 │   ├── main.js                     # 入口：挂载 Vue + 引入 Font Awesome
 │   ├── App.vue                     # UI 编排：选择页/播放页、音源下拉、面板开关
 │   ├── usePlayer.js                # 播放引擎 composable：双 audio 轮换、倒计时、Media Session
+│   ├── useAudioCache.js            # Cache Storage 下载、验证与状态机
+│   ├── audio-config.js             # 播放器和转码脚本共用的淡变配置
 │   ├── audio-sources.js            # 音源清单（静态 import .ogg）
 │   ├── countdown.js                # 倒计时预设 + 格式化函数（含自检）
 │   └── components/
@@ -62,12 +68,12 @@ Sleep-main/
 
 1. 扫描 `src/audio/` 下的 `.mp3` 文件
 2. 用 `ffprobe` 获取每段音频时长
-3. 用 `ffmpeg` 转码：MP3 → OGG Opus 64k CBR，同时烘焙 5 秒淡入淡出
+3. 用 `ffmpeg` 转码：MP3 → OGG Opus 64k CBR，同时烘焙 5 秒等功率淡入淡出
 4. 产物 `.ogg` 写入 `src/audio/`（被 `.gitignore` 排除）
 
 ```bash
 ffmpeg -i input.mp3 \
-  -af "afade=t=in:st=0:d=5,afade=t=out:st={duration-5}:d=5" \
+  -af "afade=t=in:st=0:d=5:curve=squ,afade=t=out:st={duration-5}:d=5:curve=squ" \
   -c:a libopus -b:a 64k -vbr off output.ogg
 ```
 
@@ -80,7 +86,7 @@ build:audio → vite build (vite.config.js)
 - `vite-plugin-singlefile` 将所有资源（JS/CSS/woff2/ogg）base64 内联进单个 `dist/index.html`
 - `assetsInlineLimit: 100MB` 确保 ogg 也被内联
 - 产物可在 `file://` 协议下直接打开（U 盘使用）
-- 预期大小：~35-45MB（原版 ~130MB）
+- 当前六段 90 秒音源的产物约 7 MB；大小会随音频数量与时长变化
 
 ### PWA 构建（`npm run build:pwa`）
 
@@ -99,9 +105,9 @@ build:audio → vite build (vite.config.pwa.js)
 **原版方案（已替换）**：运行时 `decodeAudioData` → 改振幅 → `wav-encode` → blob URL
 **当前方案**：构建时 ffmpeg 烘焙淡变 → `<audio>` 直接播放 ogg data URI / 相对路径
 
-1. **淡变已烘焙进音频文件**：每段 ogg 的开头 5 秒和结尾 5 秒已有等功率淡入淡出
+1. **淡变已烘焙进音频文件**：每段 ogg 的开头 5 秒和结尾 5 秒使用平方根（`squ`）等功率淡入淡出
 2. **双 `<audio>` 实例（A、B）**：`loop=false`，每段播一次自然停
-3. **轮换触发用 `timeupdate`**：当前段播到 `duration - 5` 秒时启动下一段，两段重叠 5 秒实现无缝交叉淡变
+3. **轮换触发用 `timeupdate` + 定时器 + `ended` 兜底**：当前段播到 `duration - 5` 秒时启动下一段，两段重叠 5 秒实现无缝交叉淡变
 4. **运行时零处理**：不需要 AudioContext、wav-encode、blob 缓存
 
 ### 倒计时：墙钟驱动，与音频交接独立
@@ -115,7 +121,7 @@ build:audio → vite build (vite.config.pwa.js)
 三态状态机：`idle / playing / paused`
 
 - **暂停**：保留最新一段的进度，已过交接点的老段归零停掉
-- **继续**：保留段原地接播，`ontimeupdate` 仍在 → 播到交接点自然往下走
+- **继续**：保留段原地接播，重新注册交接监听与定时兜底
 - **停止**：回到选择页，彻底清除
 
 ### Media Session（蓝牙耳机/通知栏控制）
@@ -126,11 +132,12 @@ build:audio → vite build (vite.config.pwa.js)
 
 ### 缓存态图标（PWA 模式）
 
-四态：`builtin`（单文件内联）/ `loading`（准备中）/ `local`（已缓存）/ `cloud`（未下载）
+六态：`builtin`（单文件内联）/ `checking`（检查缓存）/ `downloading`（完整下载中）/ `local`（已验证缓存）/ `cloud`（未下载）/ `error`（下载失败）
 
 - 单文件模式：ogg 内联为 data URI → 显示 `builtin`（绿勾）
-- PWA 模式：首次播放后 SW 缓存 → 显示 `local`（绿勾）
-- 刷新后从 SW Cache Storage 回填 `cachedKeys`
+- PWA 模式：点击云图标会完整下载并写入 Cache Storage；在线播放未下载音源时后台尝试同一操作
+- 只有 `cache.put()` 后再由 `cache.match()` 验证成功才显示 `local`（绿勾）
+- Workbox 对音频启用 Range Requests，支持 `<audio>` 的分段请求从完整缓存中读取
 
 ## 音源管理
 
@@ -155,7 +162,7 @@ build:audio → vite build (vite.config.pwa.js)
 | 决策 | 原因 |
 | ---- | ---- |
 | 走 `<audio>` 不走 Web Audio 播放 | 移动端双 `<audio>` 可并发且熄屏持续；Web Audio 熄屏被挂起 |
-| 淡变烤进文件，不走 JS 轮询 | `<audio>.volume` 无原生淡变 API，JS 轮询精度差且熄屏易糙 |
+| 淡变烤进文件，不走 JS 轮询 | `<audio>.volume` 无原生淡变 API，JS 轮询精度差且熄屏易糙；使用平方根曲线避免线性叠加的功率凹陷 |
 | 用 Opus 64k 替代 MP3 192k | 助眠场景听感无差异，体积降低 60-75% |
 | 构建时烘焙淡变，不用运行时处理 | 去掉 AudioContext + wav-encode，运行时零开销 |
 | 用 `timeupdate` 不用 `setInterval` 触发轮换 | 熄屏漂移 + 误差累积；timeupdate 基于真实进度，误差不累积 |
@@ -168,13 +175,13 @@ build:audio → vite build (vite.config.pwa.js)
 ### Deploy to GitHub Pages（`deploy.yml`）
 
 - 触发：push `main` 分支
-- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run build:pwa` → 部署 Pages
+- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run doctor` → `npm run test:countdown` → `npm run build:pwa` → `npm run check:audio` → 部署 Pages
 - 访问：`https://leonlovecode.github.io/Sleep/`
 
 ### Release（`release.yml`）
 
 - 触发：push `v*` 标签（如 `v1.0.0`）
-- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run build` → 重命名为 `Sleep.html` → 附加到 Release
+- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run doctor` → `npm run test:countdown` → `npm run build` → `npm run check:audio` → 重命名为 `Sleep.html` → 附加到 Release
 - 下载：`https://github.com/leonlovecode/Sleep/releases/latest/download/Sleep.html`
 
 ## 素材来源
