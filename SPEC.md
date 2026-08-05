@@ -33,6 +33,8 @@ Sleep/
 ├── scripts/
 │   ├── build-audio.mjs             # 构建时音频转码：MP3 → Opus 64k + 烘焙淡入淡出
 │   ├── doctor.mjs                  # Node、FFmpeg 和音频源环境检查
+│   ├── check-release.mjs           # 单文件 Release 附件完整性检查
+│   ├── generate-checksum.mjs       # 生成 Release SHA-256 校验文件
 │   └── check-audio-seams.mjs       # OGG 产物与时长完整性检查
 ├── public/
 │   ├── favicon.svg                 # 网站图标
@@ -70,6 +72,8 @@ Sleep/
 2. 用 `ffprobe` 获取每段音频时长
 3. 用 `ffmpeg` 转码：MP3 → OGG Opus 64k CBR，同时烘焙 5 秒等功率淡入淡出
 4. 产物 `.ogg` 写入 `src/audio/`（被 `.gitignore` 排除）
+
+当 MP3 或共享淡变配置变化时会自动重新转码；若修改了编码参数，运行 `npm run build:audio -- --force` 全量重建。
 
 ```bash
 ffmpeg -i input.mp3 \
@@ -181,7 +185,7 @@ build:audio → vite build (vite.config.pwa.js)
 ### Release（`release.yml`）
 
 - 触发：push `v*` 标签（如 `v1.0.0`）
-- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run doctor` → `npm run test:countdown` → `npm run build` → `npm run check:audio` → 重命名为 `Sleep.html` → 附加到 Release
+- 步骤：checkout → 安装 ffmpeg → `npm ci` → `npm run doctor` → `npm run test:countdown` → `npm run build` → `npm run check:audio` → 重命名为 `Sleep.html` → `npm run check:release` → `npm run checksum:release` → 附加 `Sleep.html` 与 `Sleep.html.sha256` 到 Release
 - 下载：`https://github.com/leonlovecode/Sleep/releases/latest/download/Sleep.html`
 
 ## 素材来源

@@ -1,7 +1,7 @@
 {
   "name": "sleep",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "engines": {
     "node": ">=24.18.1 <25"
@@ -10,6 +10,8 @@
     "doctor": "node scripts/doctor.mjs",
     "test:countdown": "node src/countdown.js",
     "check:audio": "node scripts/check-audio-seams.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "checksum:release": "node scripts/generate-checksum.mjs",
     "dev": "vite",
     "build:audio": "node scripts/build-audio.mjs",
     "build": "npm run build:audio && vite build",

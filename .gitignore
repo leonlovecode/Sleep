@@ -29,3 +29,7 @@ dist-ssr
 
 # 音频构建产物
 src/audio/*.ogg
+
+# 本地 Release 构建产物
+Sleep.html
+Sleep.html.sha256

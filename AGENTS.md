@@ -19,10 +19,13 @@ npm ci                 # install locked dependencies
 npm run doctor         # verify Node, FFmpeg, ffprobe, libopus, and MP3 sources
 npm run dev            # start Vite development server
 npm run test:countdown # run countdown utility self-check
-npm run build:audio    # generate ignored OGG Opus files from MP3 sources
+npm run build:audio    # generate or reuse ignored OGG Opus files from MP3 sources
+npm run build:audio -- --force # rebuild every OGG after codec-setting changes
 npm run build          # build standalone dist/index.html
 npm run build:pwa      # build PWA output for GitHub Pages
 npm run check:audio    # validate generated OGG files and durations
+npm run check:release  # validate renamed standalone Sleep.html release artifact
+npm run checksum:release # write Sleep.html.sha256 for a release artifact
 ```
 
 Run `doctor`, `test:countdown`, `build:pwa`, and `check:audio` before publishing. These checks also run in GitHub Actions.

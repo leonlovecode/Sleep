@@ -8,7 +8,9 @@ import { CROSSFADE_SECONDS, FADE_CURVE } from '../src/audio-config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const audioDir = join(__dirname, '..', 'src', 'audio')
+const buildInputs = [join(__dirname, '..', 'src', 'audio-config.js')]
 const FADE = CROSSFADE_SECONDS
+const force = process.argv.includes('--force')
 
 function run(binary, args, options = {}) {
   try {
@@ -24,6 +26,8 @@ function run(binary, args, options = {}) {
 async function main() {
   const files = await readdir(audioDir)
   const mp3Files = files.filter(f => f.endsWith('.mp3'))
+  const buildInputStats = await Promise.all(buildInputs.map(file => stat(file)))
+  const buildInputMtime = Math.max(...buildInputStats.map(fileStat => fileStat.mtimeMs))
 
   if (mp3Files.length === 0) {
     console.error(`错误: src/audio/ 目录下没有找到 .mp3 文件`)
@@ -35,6 +39,12 @@ async function main() {
     const input = join(audioDir, file)
     const output = join(audioDir, file.replace(/\.mp3$/i, '.ogg'))
     const tempOutput = output.replace(/\.ogg$/i, '.tmp.ogg')
+    const inputStat = await stat(input)
+    const outputStat = await stat(output).catch(() => null)
+    if (!force && outputStat && outputStat.mtimeMs >= Math.max(inputStat.mtimeMs, buildInputMtime)) {
+      console.log(`✓ ${file} → 使用现有 ${file.replace(/\.mp3$/i, '.ogg')}`)
+      continue
+    }
 
     // 获取时长
     const duration = run('ffprobe', [
@@ -49,7 +59,7 @@ async function main() {
     // 与原版 Math.sqrt(progress) 对齐的等功率淡变。
     await unlink(tempOutput).catch(() => {})
     run('ffmpeg', [
-      '-y', '-i', input,
+      '-hide_banner', '-loglevel', 'error', '-y', '-i', input,
       '-af', `afade=t=in:st=0:d=${FADE}:curve=${FADE_CURVE},afade=t=out:st=${fadeOutStart}:d=${FADE}:curve=${FADE_CURVE}`,
       '-c:a', 'libopus', '-b:a', '64k', '-vbr', 'off', tempOutput,
     ], { stdio: 'inherit' })

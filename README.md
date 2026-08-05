@@ -35,6 +35,8 @@ npm run preview        # 配合 build:pwa 本地预览 PWA
 
 本地要求：Node.js 24.18.1（见 `.nvmrc`）与 PATH 中可用的 `ffmpeg`、`ffprobe`，且 FFmpeg 必须包含 `libopus` 编码器。
 
+正式 Release 同时附带 `Sleep.html.sha256`。Windows 可用 `Get-FileHash .\Sleep.html -Algorithm SHA256` 计算摘要，并与该文件中的值比对。
+
 ## 更新说明
 
 项目更新记录见 [CHANGELOG.md](./CHANGELOG.md)。正式发布时，先将已验证的 `main` 提交推送到 GitHub，再推送同一提交的 `v*` 标签；Release 工作流会自动生成并附加 `Sleep.html`。
