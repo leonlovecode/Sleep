@@ -28,7 +28,7 @@ jobs:
         run: mv dist/index.html Sleep.html
       - run: npm run check:release
       - run: npm run checksum:release
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             Sleep.html
